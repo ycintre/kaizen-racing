@@ -2,7 +2,7 @@
   <div>
 
     <div class="container">
-      <md-card v-for="(player, index) in sortedPlayers">
+      <md-card v-for="(currentPlayer, index) in sortedPlayers">
         <md-card-header>
 
           <md-avatar>
@@ -14,158 +14,222 @@
             </div>
           </md-avatar>
           <md-card-header-text>
-            <div class="md-title">{{player.name}}</div>
-            <div class="md-subhead">{{player.time}}</div>
+            <div class="md-title">{{currentPlayer.name}}</div>
+            <div class="md-subhead">{{currentPlayer.displayTime}}</div>
           </md-card-header-text>
         </md-card-header>
 
-        <div v-if="index === 0" class="cup-logo">
+        <div class="cup-logo" v-if="index === 0">
           <img src="../assets/cup.png"/>
         </div>
       </md-card>
     </div>
 
     <div class="container">
-
-      <div>
-        <div>Player 1</div>
-        <input v-model="player1.name" placeholder="Player 1">
-        <!--<div><span>Lap 1</span><span>{{formatTime(player1.lapTimes[0].diff(raceStartTime))}}</span></div>-->
-        <!--<div><span>Lap 2</span><span>{{formatTime(player1.lapTimes[1].diff(raceStartTime))}}</span></div>-->
-        <!--<div><span>Lap 3</span><span>{{formatTime(player1.lapTimes[2].diff(raceStartTime))}}</span></div>-->
-        <div><span>Race</span><span>{{player1.totalTime}}</span></div>
-        <br/>
-        <button v-on:click="triggerLap(player1)">Fake lap!</button>
-        <button v-on:click="saveResult(player1)">Save results</button>
-        <button v-on:click="resetGame(player1)">Reset</button>
-      </div>
-
-      <div>
-        <div>Player 2</div>
-        <input v-model="player2.name" placeholder="Player 2">
-        <!--<div><span>Lap 1</span><span>{{formatTime(player2.lapTimes[0].diff(raceStartTime))}}</span></div>-->
-        <!--<div><span>Lap 2</span><span>{{formatTime(player2.lapTimes[1].diff(raceStartTime))}}</span></div>-->
-        <!--<div><span>Lap 3</span><span>{{formatTime(player2.lapTimes[2].diff(raceStartTime))}}</span></div>-->
-        <div><span>Race</span><span>{{player2.totalTime}}</span></div>
-        <br/>
-        <button v-on:click="triggerLap(player2)">Fake lap!</button>
-        <button v-on:click="saveResult(player2)">Save results</button>
-        <button v-on:click="resetGame(player2)">Reset</button>
-
-      </div>
-
-      <button v-on:click="startRace()">Start race!</button>
+      <LiveTimer v-bind:player="player1"></LiveTimer>
+      <LiveTimer v-bind:player="player2"></LiveTimer>
     </div>
 
+    <div class="container">
+      <md-button class="md-raised action-button md-accent" v-on:click="triggerLap('1')" v-if="debug">
+        Manual lap (P1)
+      </md-button>
+      <md-button class="md-raised action-button" v-on:click="openSavePopup(player1)"
+                 :disabled="player1.lapTimes.length !== config.race.lapCount +1">Save P1 time
+      </md-button>
+      <md-button class="md-raised action-button" v-on:click="startCountdown()">🏁 Start new race</md-button>
+      <md-button class="md-raised action-button" v-on:click="openSavePopup(player2)"
+                 :disabled="player2.lapTimes.length !== config.race.lapCount +1">Save P2 time
+      </md-button>
+      <md-button class="md-raised action-button md-accent" v-on:click="triggerLap('2')" v-if="debug">
+        Manual lap (P2)
+      </md-button>
+    </div>
+
+    <Countdown v-bind:countdown="countdown"></Countdown>
+    <SavePopup v-bind:savePopupData="savePopup" v-on:confirm="saveResult($event)"></SavePopup>
+
+    <Menu v-on:results-loaded="leaderboard = $event" v-on:toggle-debug="debug = !debug"></Menu>
   </div>
 </template>
 
 <script>
-  const SerialPort = require('serialport');
-  const moment = require('moment');
+  import config from '../../services/config';
+  import countdown from '../../services/countdown';
+  import formatter from '../../services/formatter';
+  import hardware from '../../services/hardware';
+  import liveTimer from '../../services/live-timer';
+  import storage from '../../services/storage';
+  import Countdown from './Countdown';
+  import LiveTimer from './LiveTimer';
+  import Menu from './Menu';
+  import SavePopup from './SavePopup';
 
-  const SERIAL_PORT = '/dev/ttyACM0';
-  const BAUD_RATE = 115200;
-  const DEBOUNCE = 1000;
-  const RACE_LAP_COUNT = 3;
+  const moment = require('moment');
 
   export default {
     name: 'Leaderboard',
+    components: { SavePopup, Countdown, Menu, LiveTimer },
     data: function () {
       return {
         leaderboard: [],
-        raceStartTime: null,
+        countdown: {
+          showDialog: false,
+          value: null,
+          interval: null,
+          lights: ['', '', '']
+        },
         player1: {
           id: '1',
           name: 'Player 1',
           lapTimes: [],
+          displayLapsTimes: [],
           totalTime: null,
-          lastTrip: moment()
+          winner: false,
+          delta: null,
         },
         player2: {
           id: '2',
           name: 'Player 2',
           lapTimes: [],
+          displayLapsTimes: [],
           totalTime: null,
-          lastTrip: moment()
-        }
+          winner: false,
+          delta: null,
+        },
+        savePopup: {
+          active: false,
+          playerId: null,
+          time: null,
+          displayTime: null
+        },
+        config,
+        debug: true
       }
     },
 
     computed: {
       sortedPlayers: function () {
-        return this.leaderboard.slice(0, 3);
+        return this.leaderboard
+          .sort((a, b) => a.time - b.time)
+          .slice(0, config.leaderBoard.resultCount);
       }
     },
 
     methods: {
+
+      initUIRefresh: function () {
+        setInterval(() => {
+          const player1Results = liveTimer.computeLapsTimes(this.player1);
+          this.player1.displayLapsTimes = player1Results.lapsTimes;
+          this.player1.totalTime = player1Results.totalTime;
+
+          const player2Results = liveTimer.computeLapsTimes(this.player2);
+          this.player2.displayLapsTimes = player2Results.lapsTimes;
+          this.player2.totalTime = player2Results.totalTime;
+        }, config.liveRace.refreshInterval);
+      },
+
+      initSerialReading: function () {
+        hardware.watchLap(this.triggerLap);
+      },
+
+      startCountdown: function () {
+        this.resetGame(this.player1);
+        this.resetGame(this.player2);
+        countdown.startCountdown(this.countdown, this.startRace);
+      },
+
       startRace: function () {
-        // TODO countdown visual + audio!
-        this.raceStartTime = moment();
+        const startTime = moment();
+        this.player1.lapTimes.push(startTime);
+        this.player2.lapTimes.push(startTime);
       },
-      triggerLap: function (player) {
 
-        if (moment().diff(player.lastTrip) < DEBOUNCE) {
-          return console.log(`Input for player ${player.id} debounced`)
+      triggerLap: function (playerNumber) {
+
+        let currentPlayer;
+        let otherPlayer;
+        switch (playerNumber) {
+          case '1':
+            currentPlayer = this.player1;
+            otherPlayer = this.player2;
+            break;
+          case '2':
+            currentPlayer = this.player2;
+            otherPlayer = this.player1;
+            break;
+          default:
+            console.error(`Unexpected player number received: ${playerNumber}, input ignored`);
+            return;
         }
 
-        player.lastTrip = moment();
+        const triggerTime = moment();
+        const lastLapTime = currentPlayer.lapTimes[currentPlayer.lapTimes.length - 1];
+        const lastLapDuration = triggerTime.diff(lastLapTime);
+        const raceDuration = triggerTime.diff(currentPlayer.lapTimes[0]);
 
-        if (player.lapTimes.length < RACE_LAP_COUNT - 1) {
-          player.lapTimes.push(moment());
-          console.log(`⏱  ${player.id} finished lap ${player.lapTimes.length} in ${player.lapTimes[player.lapTimes.length - 1].diff(this.raceStartTime)}`);
-        } else if (player.lapTimes.length === RACE_LAP_COUNT - 1) {
-          player.lapTimes.push(moment());
-          console.log(`🏁 ${player.id} finished the race in ${player.lapTimes[player.lapTimes.length - 1].diff(this.raceStartTime)}`);
+        if (lastLapDuration < config.race.lapDebounce) {
+          return console.log(`Input for Player ${currentPlayer.id} debounced (too fast: ${lastLapDuration}ms`)
+        }
+
+        if (currentPlayer.lapTimes.length < config.race.lapCount) {
+          currentPlayer.lapTimes.push(triggerTime);
+          console.log(`⏱  Player ${currentPlayer.id} finished lap ${currentPlayer.lapTimes.length - 1} in ${lastLapDuration}`);
+        } else if (currentPlayer.lapTimes.length === config.race.lapCount) {
+          currentPlayer.lapTimes.push(triggerTime);
+          console.log(`🏁 Player ${currentPlayer.id} finished the race in ${raceDuration}`);
+          if (!otherPlayer.winner) {
+            currentPlayer.winner = true;
+            console.log(`🏆 Player ${currentPlayer.id} won the race`);
+          } else {
+            currentPlayer.delta = formatter.formatTime(currentPlayer.lapTimes[currentPlayer.lapTimes.length - 1].diff(otherPlayer.lapTimes[otherPlayer.lapTimes.length - 1]));
+          }
+
         } else {
-          console.log(`🏆 ${player.id} race is already over! (finished in ${player.lapTimes[player.lapTimes.length - 1].diff(this.raceStartTime)})`);
+          console.log(`🏆 Player ${currentPlayer.id} race is already over, lap ignored`);
         }
       },
-      saveResult: function (player) {
-        // TODO write to disk
-        this.leaderboard.push({
-          name: player.name,
-          time: player.lapTimes[player.lapTimes.length - 1].diff(this.raceStartTime)
-        });
-      },
+
       resetGame: function (player) {
         player.lapTimes = [];
+        player.displayLapsTimes = [];
+        player.totalTime = null;
+        player.winner = false;
+        player.delta = null;
         console.log(`❎ Player ${player.id} have been reset`);
       },
-      formatTime: function (duration) {
-        return moment.utc(duration.as('milliseconds')).format('mm:ss.SSS');
-      }
+
+      openSavePopup: function (player) {
+        this.savePopup = {
+          active: true,
+          playerId: player.id,
+          screenName: '',
+          time: player.lapTimes[player.lapTimes.length - 1].diff(player.lapTimes[0]),
+          displayTime: formatter.formatTime(player.lapTimes[player.lapTimes.length - 1].diff(player.lapTimes[0]))
+        }
+      },
+
+      saveResult: function (player) {
+        this.savePopup = {
+          active: false,
+          playerId: null,
+          time: null,
+          displayTime: null
+        };
+
+        this.leaderboard.push({
+          name: player.screenName,
+          time: player.time,
+          displayTime: player.displayTime
+        });
+        storage.autoSaveResults(this.leaderboard);
+      },
     },
 
     created: function () {
-      // Force refresh ui
-      // this.interval = setInterval(() => {
-      //   this.player1.totalTime = this.player1.lapTimes[0] ? process.hrtime(this.player1.lapTimes[0]) : null;
-      //   this.player2.totalTime = this.player2.lapTimes[0] ? process.hrtime(this.player2.lapTimes[0]) : null;
-      // }, 100);
-
-      const port = new SerialPort(SERIAL_PORT, { autoOpen: false, baudRate: BAUD_RATE });
-
-      port.open(function (err) {
-        if (err) {
-          return console.error('Error opening port: ', err.message)
-        }
-
-        console.info('Port successfully opened');
-      });
-
-      port.on('data', (rawData) => {
-        console.log(`Data received: ${rawData}`);
-
-        const playerNumber = data.toString().trim();
-
-        if (playerNumber === '1') {
-          this.triggerLap(this.player1);
-        } else if (data.toString().trim() === '2') {
-          this.triggerLap(this.player2);
-        }
-
-      });
+      this.initUIRefresh();
+      this.initSerialReading();
     }
   }
 </script>
@@ -177,6 +241,7 @@
     flex-wrap: wrap;
     justify-content: space-around;
     align-content: center;
+    margin-bottom: 15px;
   }
 
   /* Card */
@@ -254,4 +319,12 @@
     background-color: rgba(0, 0, 0, .26);
     border-radius: 50%;
   }
+
+  .action-button {
+    font-size: 2em;
+    line-height: 2em;
+    height: 70px;
+    border-radius: 10px;
+  }
+
 </style>

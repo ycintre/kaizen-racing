@@ -1,4 +1,4 @@
-# my-project2
+# kaizen-racing
 
 > An electron-vue project
 
