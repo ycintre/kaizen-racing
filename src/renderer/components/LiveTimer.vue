@@ -9,7 +9,9 @@
     </md-card>
 
     <md-card v-for="i in config.race.lapCount">
-      <div class="lap-time">{{player.displayLapsTimes[i-1]}}</div>
+      <div class="lap-time" @click="$emit('lapSelected', player.displayLapsTimes[i-1])">
+        {{player.displayLapsTimes[i-1]}}
+      </div>
       <div class="lap-number md-elevation-4">Lap {{i}}</div>
     </md-card>
 
@@ -90,10 +92,16 @@
     float: right;
   }
 
+  .lap-time:hover {
+    cursor: pointer;
+    opacity: .5;
+  }
+
   .lap-delta {
     text-align: right;
     font-size: 0.6em;
     opacity: 0.54
   }
+
 
 </style>

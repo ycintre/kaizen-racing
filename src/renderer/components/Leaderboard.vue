@@ -26,8 +26,8 @@
     </div>
 
     <div class="container">
-      <LiveTimer v-bind:player="player1"></LiveTimer>
-      <LiveTimer v-bind:player="player2"></LiveTimer>
+      <LiveTimer v-bind:player="player1" v-on:lapSelected="fillBestLap"></LiveTimer>
+      <LiveTimer v-bind:player="player2" v-on:lapSelected="fillBestLap"></LiveTimer>
     </div>
 
     <div class="container">
@@ -46,6 +46,8 @@
       </md-button>
     </div>
 
+    <BestLap v-bind:active:="bestLap.active" v-bind:time="bestLap.time"></BestLap>
+
     <Countdown v-bind:countdown="countdown"></Countdown>
     <SavePopup v-bind:savePopupData="savePopup" v-on:confirm="saveResult($event)"></SavePopup>
 
@@ -60,6 +62,7 @@
   import hardware from '../../services/hardware';
   import liveTimer from '../../services/live-timer';
   import storage from '../../services/storage';
+  import BestLap from './BestLap';
   import Countdown from './Countdown';
   import LiveTimer from './LiveTimer';
   import Menu from './Menu';
@@ -69,7 +72,7 @@
 
   export default {
     name: 'Leaderboard',
-    components: { SavePopup, Countdown, Menu, LiveTimer },
+    components: { BestLap, SavePopup, Countdown, Menu, LiveTimer },
     data: function () {
       return {
         leaderboard: [],
@@ -102,6 +105,10 @@
           playerId: null,
           time: null,
           displayTime: null
+        },
+        bestLap: {
+          active: false,
+          time: '99:99.999'
         },
         config,
         debug: true
@@ -225,6 +232,10 @@
         });
         storage.autoSaveResults(this.leaderboard);
       },
+
+      fillBestLap: function (time) {
+        this.bestLap.time = time;
+      }
     },
 
     created: function () {
@@ -256,7 +267,7 @@
   }
 
   .md-card:first-child {
-    width: 80%;
+    width: 65%;
   }
 
   .md-card:nth-child(2), .md-card:nth-child(3) {
