@@ -52,6 +52,7 @@
     <SavePopup v-bind:savePopupData="savePopup" v-on:confirm="saveResult($event)"></SavePopup>
 
     <Menu v-on:results-loaded="leaderboard = $event" v-on:toggle-debug="debug = !debug"></Menu>
+    <Firework v-if="firework"></Firework>
   </div>
 </template>
 
@@ -64,6 +65,7 @@
   import storage from '../../services/storage';
   import BestLap from './BestLap';
   import Countdown from './Countdown';
+  import Firework from './Firework';
   import LiveTimer from './LiveTimer';
   import Menu from './Menu';
   import SavePopup from './SavePopup';
@@ -72,7 +74,7 @@
 
   export default {
     name: 'Leaderboard',
-    components: { BestLap, SavePopup, Countdown, Menu, LiveTimer },
+    components: { Firework, BestLap, SavePopup, Countdown, Menu, LiveTimer },
     data: function () {
       return {
         leaderboard: [],
@@ -111,7 +113,8 @@
           time: '99:99.999'
         },
         config,
-        debug: true
+        debug: true,
+        firework: false
       }
     },
 
@@ -189,6 +192,11 @@
           if (!otherPlayer.winner) {
             currentPlayer.winner = true;
             console.log(`🏆 Player ${currentPlayer.id} won the race`);
+
+            if(this.leaderboard[0] && raceDuration < this.leaderboard[0].time) {
+              this.firework = true;
+            }
+
           } else {
             currentPlayer.delta = formatter.formatTime(currentPlayer.lapTimes[currentPlayer.lapTimes.length - 1].diff(otherPlayer.lapTimes[otherPlayer.lapTimes.length - 1]));
           }
@@ -199,6 +207,8 @@
       },
 
       resetGame: function (player) {
+        this.firework = false;
+
         player.lapTimes = [];
         player.displayLapsTimes = [];
         player.totalTime = null;
