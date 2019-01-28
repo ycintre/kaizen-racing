@@ -26,20 +26,20 @@
     </div>
 
     <div class="container">
-      <LiveTimer v-bind:player="player1" v-on:lapSelected="fillBestLap"></LiveTimer>
       <LiveTimer v-bind:player="player2" v-on:lapSelected="fillBestLap"></LiveTimer>
+      <LiveTimer v-bind:player="player1" v-on:lapSelected="fillBestLap"></LiveTimer>
     </div>
 
     <div class="container">
       <md-button class="md-raised action-button md-accent" v-on:click="triggerLap('1')" v-if="debug">
         Manual lap (P1)
       </md-button>
-      <md-button class="md-raised action-button" v-on:click="openSavePopup(player1)"
-                 :disabled="player1.lapTimes.length !== config.race.lapCount +1">Save P1 time
+      <md-button class="md-raised action-button" v-on:click="openSavePopup(player2)"
+                 :disabled="player2.lapTimes.length !== config.race.lapCount +1">Save Blue time
       </md-button>
       <md-button class="md-raised action-button" v-on:click="startCountdown()">🏁 Start new race</md-button>
-      <md-button class="md-raised action-button" v-on:click="openSavePopup(player2)"
-                 :disabled="player2.lapTimes.length !== config.race.lapCount +1">Save P2 time
+      <md-button class="md-raised action-button" v-on:click="openSavePopup(player1)"
+                 :disabled="player1.lapTimes.length !== config.race.lapCount +1">Save Yellow time
       </md-button>
       <md-button class="md-raised action-button md-accent" v-on:click="triggerLap('2')" v-if="debug">
         Manual lap (P2)
@@ -92,6 +92,8 @@
           totalTime: null,
           winner: false,
           delta: null,
+          color: 'Yellow',
+          fontColor: ''
         },
         player2: {
           id: '2',
@@ -101,6 +103,8 @@
           totalTime: null,
           winner: false,
           delta: null,
+          color: 'Blue',
+          fontcolor: ''
         },
         savePopup: {
           active: false,

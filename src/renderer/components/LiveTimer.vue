@@ -3,7 +3,7 @@
   <div class="container">
     <md-card class="player-name-card">
       <md-card-content>
-        <span class="player-name">Player {{player.id}}</span>
+        <span class="player-name">Player {{player.color}}</span>
         <div class="player-winner" v-if="player.winner">🏆</div>
       </md-card-content>
     </md-card>
